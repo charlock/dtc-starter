@@ -5,18 +5,18 @@
 VPS：Oracle Cloud 新加坡，`168.107.91.111`，3 CPU / 19G / 150G，Ubuntu 24.04.5 LTS，ARM64
 代码：fork `https://github.com/charlock/dtc-starter`，main 在 `6440e85`（Medusa 2.22.6 / Next 16.3.8）
 镜像：`nginx:1.30-alpine`、`postgres:16-alpine`、`redis:8-alpine`、
-基础镜像 `dtc-runtime:node22-pnpm10`（基于 `node:22.23.3-alpine`）
+基础镜像 `dtc-runtime:node22-pnpm10-2.22.6`（基于 `node:22.23.3-alpine`，见 `docker/`）
 
-## 现状（2026-11-11，v1.0.3 已部署，实测）
+## 现状（2026-11-11，v1.1.0 已部署，实测）
 
 - 商城、前台、后台、`https://` 全部 200。HTTPS 521 已修好（Origin 证书 + Nginx 443）。
 - 地区：数据库里只有 Europe / EUR（丹麦、法国、德国）。美国 USD 和中国 CNY 待建，
   建完 `/us/store` 和 `/cn/store` 才不会 307 跳到丹麦。
-- 后端跑的是 **Medusa 2.21.2 的代码**，不是 2.22.6：
-  server/worker 容器用基础镜像里的 `node_modules`（2.21.2），发布包只换
-  `.medusa/server` 和配置文件。商城是真的 2.22.6 / Next 16.3.8。
-  要真升后端到 2.22.6，得重建基础镜像（按新 lockfile 重新 `pnpm install`）+ 跑数据库迁移，
-  这一步还没做，决定前先看“已知问题”。
+- 后端已是 **Medusa 2.22.6**（v1.1.0）：基础镜像按 fork main 的 lockfile 重建
+  （`docker/Dockerfile.dtc-runtime-2.22.6`），发布时 `medusa db:migrate` 自动跑了
+  2 个新迁移（迁移记录 188 → 190）。之前 2.21.2 后端 + 2.22.6 前端不一致导致的
+  `GET /admin/modules` 404 已消失。旧镜像 `dtc-runtime:node22-pnpm10`（2.21.2）
+  还在 VPS 上，回滚可用，但回滚会带回那个 404。
 - Redis 已接好：event-bus-redis、workflow-engine-redis、locking-redis 都已连接，
   没有 Local Event Bus / in-memory locking 警告。Cache 模块还没开（需要
   `MEDUSA_FF_CACHING=true` + compose 里加环境变量，下个版本再开）。
@@ -36,12 +36,13 @@ VPS：Oracle Cloud 新加坡，`168.107.91.111`，3 CPU / 19G / 150G，Ubuntu 24
   nginx/certs/              # origin.pem / origin.key，只在 VPS 上，绝不提交
   releases/v1.0.1/          # 旧版本（Medusa 2.21.2 / Next 15.5.24）
   releases/v1.0.2/          # 商城重建（2.22.6 / Next 16.3.8，key 已修正，http 后端 URL）
-  releases/v1.0.3/          # 当前版本（同 v1.0.2 后端，商城改回 https 后端 URL）
+  releases/v1.0.3/          # 同 v1.0.2 后端，商城改回 https 后端 URL
+  releases/v1.1.0/          # 当前版本：后端真升到 2.22.6（新基础镜像），商城同 v1.0.3
   releases/<version>/
     backend-server/         # medusa build 产物（.medusa/server）
     backend-config/medusa-config.ts
     storefront/standalone/  # Next standalone 产物（Next 16 布局见下）
-    base-image.txt          # dtc-runtime:node22-pnpm10
+    base-image.txt          # dtc-runtime:node22-pnpm10-2.22.6
     target-platform.txt     # linux/arm64
 ```
 
@@ -73,6 +74,8 @@ nginx/default.conf.template  # 80 + 443，Origin 证书
 nginx/certs/README.md        # 证书放这里，不提交
 backend/medusa-config.ts     # 生产版配置（Redis event/workflow/locking + file-s3 门控）
 env/.env.prod.example        # .env.prod 模板
+docker/
+  Dockerfile.dtc-runtime-2.22.6  # 基础镜像 Dockerfile（2.22.6，见下）
 scripts/
   prepare-v102.sh            # 备份 DB、修正 .env.prod 的 publishable key、克隆 fork
   build-storefront-v102.sh   # 商城构建（http 后端 URL，HTTPS 没通时用）
@@ -84,10 +87,34 @@ scripts/
   create-regions.md          # 建 US/CN 地区的接口说明
   backup.sh                  # 每日 pg_dump（配 cron）
   sanitize-for-github.py     # 把 compose 里的密钥换成占位符（提交前跑）
+  build-base-image-2226.sh   # 构建 2.22.6 基础镜像（v1.1.0 用）
+  assemble-v110.sh           # 组装 v1.1.0 发布包
+  check-admin-modules.sh     # 查 /admin/modules 404 的诊断脚本
+  check-modules-route-2212.sh  # 查 2.21.2 里有没有 modules 路由
+  check-region-tables.sh     # 查 region / region_country 表结构
 ```
 
 不在这个包里的东西（VPS 上才有，不提交）：`.env.prod`、`nginx/certs/origin.pem`、
 `nginx/certs/origin.key`、`releases/`、`build/`、`/data/backup/`、数据库本身。
+
+## 后端升级（v1.1.0 做法，后端版本变了才需要）
+
+server/worker 容器用基础镜像里的 `node_modules`，发布包只换 `.medusa/server`
+和配置，所以升后端版本必须先重建基础镜像：
+
+```sh
+# 1. 在 VPS 上构建新基础镜像（Dockerfile 在 docker/，脚本在 scripts/）
+bash deploy/scripts/build-base-image-2226.sh   # 产物 dtc-runtime:node22-pnpm10-2.22.6
+# 2. 组装新 release（后端产物复用已构建好的版本，base-image.txt 指向新镜像）
+bash deploy/scripts/assemble-v110.sh
+# 3. 发布；server 启动命令里自带 `medusa db:migrate`，迁移自动跑
+cd /data/medusa && bash deploy-remote.sh v1.1.0
+```
+
+升级前先备份数据库（`/data/backup/medusa-store-pre-v1.1.0-*.sql.gz`）。
+`docker/Dockerfile.dtc-runtime-2.22.6` 是从 `docker history` 还原的原镜像做法：
+`node:22.23.3-alpine` + rsync + corepack pnpm 10.11.1，只复制 package 清单 +
+`medusa-config.ts` + `next.config.js`，然后 `pnpm install --frozen-lockfile`。
 
 ## 发布新版本（商城改动）
 
@@ -103,11 +130,10 @@ curl -s -o /dev/null -w "%{http_code}\n" https://shop-admin.satank.cn/health
 ```
 
 后端改动同理：先 `medusa build`，再把 `.medusa/server` 和 `medusa-config.ts`
-打包成新 release，后端版本升级还要重建基础镜像，见“已知问题”。
+打包成新 release；后端版本升级要先重建基础镜像，见上节。
 
 ## 已知问题
 
-- 后端还是 2.21.2 代码（见上文），要升 2.22.6 需重建基础镜像 + 数据库迁移。
 - 管理员密码曾明文出现在 VPS 的 `/root/.bash_history` 里，建议清历史、换密码。
 - 地区只有 Europe，美国和中国待建。
 - R2 还没填，文件存储还是本地卷。
