@@ -1,0 +1,147 @@
+services:
+  nginx:
+    image: nginx:1.30-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      STORE_DOMAIN: ${STORE_DOMAIN:?STORE_DOMAIN must be set}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN must be set}
+      NGINX_ENVSUBST_FILTER: ^(STORE_DOMAIN|API_DOMAIN)$$
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      storefront:
+        condition: service_started
+      medusa_server:
+        condition: service_healthy
+    networks:
+      - medusa_network
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: medusa-store
+      POSTGRES_USER: medusa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medusa -d medusa-store"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - medusa_network
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - medusa_network
+
+  medusa_server:
+    image: ${BASE_IMAGE:?BASE_IMAGE must be set}
+    pull_policy: never
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ./releases/${VERSION:?VERSION must be set}/backend-server:/app/apps/backend/.medusa/server:ro
+      - ./releases/${VERSION:?VERSION must be set}/backend-config/medusa-config.ts:/app/apps/backend/medusa-config.ts:ro
+    environment:
+      - NODE_ENV=production
+      - MEDUSA_WORKER_MODE=server
+      - PATH=/app/apps/backend/node_modules/.bin:/app/apps/storefront/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - DATABASE_URL=<CHANGE_ME>
+      - REDIS_URL=<CHANGE_ME>
+      - JWT_SECRET=<CHANGE_ME>
+      - COOKIE_SECRET=<CHANGE_ME>
+      - STORE_CORS=${STORE_CORS}
+      - ADMIN_CORS=${ADMIN_CORS}
+      - AUTH_CORS=${AUTH_CORS}
+    command:
+      - sh
+      - -c
+      - cd /app/apps/backend/.medusa/server && medusa db:migrate && medusa start
+    networks:
+      - medusa_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:9000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  medusa_worker:
+    image: ${BASE_IMAGE:?BASE_IMAGE must be set}
+    pull_policy: never
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    depends_on:
+      medusa_server:
+        condition: service_healthy
+    volumes:
+      - ./releases/${VERSION:?VERSION must be set}/backend-server:/app/apps/backend/.medusa/server:ro
+      - ./releases/${VERSION:?VERSION must be set}/backend-config/medusa-config.ts:/app/apps/backend/medusa-config.ts:ro
+    environment:
+      - NODE_ENV=production
+      - MEDUSA_WORKER_MODE=worker
+      - PATH=/app/apps/backend/node_modules/.bin:/app/apps/storefront/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - DATABASE_URL=<CHANGE_ME>
+      - REDIS_URL=<CHANGE_ME>
+      - JWT_SECRET=<CHANGE_ME>
+      - COOKIE_SECRET=<CHANGE_ME>
+    command:
+      - sh
+      - -c
+      - cd /app/apps/backend/.medusa/server && medusa start
+    networks:
+      - medusa_network
+
+  storefront:
+    image: ${BASE_IMAGE:?BASE_IMAGE must be set}
+    pull_policy: never
+    platform: ${TARGET_PLATFORM:-linux/amd64}
+    restart: unless-stopped
+    depends_on:
+      medusa_server:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - PORT=8000
+      - HOSTNAME=0.0.0.0
+      - MEDUSA_BACKEND_URL=http://medusa_server:9000
+    volumes:
+      - ./releases/${VERSION:?VERSION must be set}/storefront/standalone:/app/apps/storefront/runtime:ro
+      - storefront_cache:/app/apps/storefront/runtime/apps/storefront/.next/cache
+      - storefront_route_cache:/app/apps/storefront/runtime/apps/storefront/.next/server/route-cache
+    command: ["node", "/app/apps/storefront/runtime/apps/storefront/server.js"]
+    networks:
+      - medusa_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  storefront_cache:
+  storefront_route_cache:
+
+networks:
+  medusa_network:
+    driver: bridge

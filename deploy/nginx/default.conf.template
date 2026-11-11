@@ -1,0 +1,46 @@
+# v1.0.3 模板：80 保持不变，443 用 Cloudflare Origin 证书
+# 证书文件放在 VPS /data/medusa/nginx/certs/origin.pem 和 origin.key
+# 80 不强制跳转 https，避免 Cloudflare 回源循环；Cloudflare 边缘负责访客侧的 HTTPS 跳转。
+server {
+    listen 80 default_server;
+    server_name _;
+    return 444;
+}
+
+server {
+    listen 80;
+    listen 443 ssl;
+    http2 on;
+    server_name ${STORE_DOMAIN};
+    ssl_certificate /etc/nginx/certs/origin.pem;
+    ssl_certificate_key /etc/nginx/certs/origin.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 20m;
+    location / {
+        proxy_pass http://storefront:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    listen 443 ssl;
+    http2 on;
+    server_name ${API_DOMAIN};
+    ssl_certificate /etc/nginx/certs/origin.pem;
+    ssl_certificate_key /etc/nginx/certs/origin.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 20m;
+    location / {
+        proxy_pass http://medusa_server:9000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

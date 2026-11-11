@@ -1,0 +1,18 @@
+# 绝不能提交的东西 —— 密钥、证书、真实环境、构建产物、备份
+.env.prod
+.env
+*.pem
+*.key
+*.p12
+*.pfx
+origin.pem
+origin.key
+kaggle.json
+releases/
+build/
+backup/
+*.sql.gz
+*.sql
+node_modules/
+.next/
+.medusa/
