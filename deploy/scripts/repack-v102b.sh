@@ -10,6 +10,9 @@ echo "== 重新打包 storefront（原生布局） =="
 rm -rf "$DST"
 mkdir -p "$DST"
 cp -a "$SRC/." "$DST/"
+# 必须把 .next/static 也复制进来：standalone 里不含 static，不复制则所有
+# /_next/static/chunks/* 都是 404，页面无样式、无 JS（2026-11-11 实测踩坑）。
+cp -a /data/build/v1.0.2/apps/storefront/.next/static "$DST/apps/storefront/.next/static"
 mkdir -p "$DST/apps/storefront/public"
 cp -a /data/build/v1.0.2/apps/storefront/public/. "$DST/apps/storefront/public/"
 echo "server.js:"; ls -lh "$DST/apps/storefront/server.js"

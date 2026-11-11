@@ -65,6 +65,11 @@ VPS：Oracle Cloud 新加坡，`168.107.91.111`，3 CPU / 19G / 150G，Ubuntu 24
    否则 Docker 在只读挂载里建挂载点会失败（`read-only file system`）。
    route-cache 另外挂了一个 volume，见 compose。
 4. `NEXT_PUBLIC_*` 是构建时 baked 进去的，改了必须重建商城，不是重启容器。
+5. standalone 里**不含 `.next/static`**：打包时必须手动把 `.next/static` 复制到
+   `standalone/apps/storefront/.next/static`（public 同理）。漏了这一步，
+   页面 HTML 是 200，但所有 `/_next/static/chunks/*` 都是 404，页面无样式、无 JS。
+   2026-11-11 实测：v1.0.2/v1.0.3 的发布包都漏了 static，首页一直是裸 HTML，
+   补上 2.8M 的 static 并重启商城后才恢复。注意这不是缓存问题，不要只清缓存。
 
 ## 文件清单
 

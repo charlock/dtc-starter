@@ -16,6 +16,10 @@ mkdir -p /data/medusa/releases/v1.0.3/backend-server /data/medusa/releases/v1.0.
 cp -a /data/medusa/releases/v1.0.2/backend-server/. /data/medusa/releases/v1.0.3/backend-server/
 cp -a /data/medusa/releases/v1.0.2/backend-config/. /data/medusa/releases/v1.0.3/backend-config/
 cp -a apps/storefront/.next/standalone/. /data/medusa/releases/v1.0.3/storefront/standalone/
+# 必须把 .next/static 也复制进来：standalone 里不含 static，不复制则所有
+# /_next/static/chunks/* 都是 404，页面无样式、无 JS（2026-11-11 实测踩坑）。
+# Next 官方 standalone 部署要求手动复制 .next/static 和 public。
+cp -a apps/storefront/.next/static /data/medusa/releases/v1.0.3/storefront/standalone/apps/storefront/.next/static
 mkdir -p /data/medusa/releases/v1.0.3/storefront/standalone/apps/storefront/public
 cp -a /data/build/v1.0.2/apps/storefront/public/. /data/medusa/releases/v1.0.3/storefront/standalone/apps/storefront/public/
 mkdir -p /data/medusa/releases/v1.0.3/storefront/standalone/apps/storefront/.next/cache

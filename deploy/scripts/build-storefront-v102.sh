@@ -26,6 +26,9 @@ mkdir -p /data/medusa/releases/v1.0.2/backend-server /data/medusa/releases/v1.0.
 cp -r apps/backend/.medusa/server/. /data/medusa/releases/v1.0.2/backend-server/
 cp apps/backend/medusa-config.ts /data/medusa/releases/v1.0.2/backend-config/medusa-config.ts
 cp -r apps/storefront/.next/standalone/. /data/medusa/releases/v1.0.2/storefront/standalone/
+# 必须把 .next/static 也复制进来：standalone 里不含 static，不复制则所有
+# /_next/static/chunks/* 都是 404，页面无样式、无 JS（2026-11-11 实测踩坑）。
+cp -r apps/storefront/.next/static /data/medusa/releases/v1.0.2/storefront/standalone/apps/storefront/.next/static
 echo "dtc-runtime:node22-pnpm10" > /data/medusa/releases/v1.0.2/base-image.txt
 echo "linux/arm64" > /data/medusa/releases/v1.0.2/target-platform.txt
 find /data/medusa/releases/v1.0.2 -maxdepth 2 | sort | head -40
