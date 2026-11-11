@@ -7,16 +7,16 @@ VPS：Oracle Cloud 新加坡，`168.107.91.111`，3 CPU / 19G / 150G，Ubuntu 24
 镜像：`nginx:1.30-alpine`、`postgres:16-alpine`、`redis:8-alpine`、
 基础镜像 `dtc-runtime:node22-pnpm10-2.22.6`（基于 `node:22.23.3-alpine`，见 `docker/`）
 
-## 现状（2026-11-11，v1.1.0 已部署，实测）
+## 现状（2026-11-11，v1.1.1 已部署，实测）
 
 - 商城、前台、后台、`https://` 全部 200。HTTPS 521 已修好（Origin 证书 + Nginx 443）。
 - 地区：Europe / EUR、United States / USD、China / CNY 三个，`/us/store` 和
-  `/cn/store` 都是 200。注意：中国区商品还没有 CNY 价格（只有 EUR 和 USD
-  价格），中国区要能下单得先给商品加 CNY 价格。
-- 后端已是 **Medusa 2.22.6**（v1.1.0）：基础镜像按 fork main 的 lockfile 重建
-  （`docker/Dockerfile.dtc-runtime-2.22.6`），发布时 `medusa db:migrate` 自动跑了
-  2 个新迁移（迁移记录 188 → 190）。之前 2.21.2 后端 + 2.22.6 前端不一致导致的
-  `GET /admin/modules` 404 已消失。旧镜像 `dtc-runtime:node22-pnpm10`（2.21.2）
+  `/cn/store` 都是 200。中国区商品已有 CNY 价格（规则 A：USD × 6.68 取整，
+  20 个变体全是 ¥100），商品页、购物车、结算页和列表页实测都是 ¥100.00。
+- 后端已是 **Medusa 2.22.6**（v1.1.1）：搜索索引加了 CNY（fork 分支
+  `satank/cny-search-index`），列表页不再回退到欧元显示；索引在启动时按新
+  结构重建（product_v1 → product_v2），4 个商品已重建索引。`GET /admin/modules`
+  404 早已在 v1.1.0 消失。旧镜像 `dtc-runtime:node22-pnpm10`（2.21.2）
   还在 VPS 上，回滚可用，但回滚会带回那个 404。
 - Redis 已接好：event-bus-redis、workflow-engine-redis、locking-redis 都已连接，
   没有 Local Event Bus / in-memory locking 警告。Cache 模块还没开（需要
@@ -39,6 +39,7 @@ VPS：Oracle Cloud 新加坡，`168.107.91.111`，3 CPU / 19G / 150G，Ubuntu 24
   releases/v1.0.2/          # 商城重建（2.22.6 / Next 16.3.8，key 已修正，http 后端 URL）
   releases/v1.0.3/          # 同 v1.0.2 后端，商城改回 https 后端 URL
   releases/v1.1.0/          # 当前版本：后端真升到 2.22.6（新基础镜像），商城同 v1.0.3
+  releases/v1.1.1/          # 当前版本：搜索索引加 CNY，列表页显示 ¥100（其余同 v1.1.0）
   releases/<version>/
     backend-server/         # medusa build 产物（.medusa/server）
     backend-config/medusa-config.ts
