@@ -10,8 +10,9 @@ VPS：Oracle Cloud 新加坡，`168.107.91.111`，3 CPU / 19G / 150G，Ubuntu 24
 ## 现状（2026-11-11，v1.1.0 已部署，实测）
 
 - 商城、前台、后台、`https://` 全部 200。HTTPS 521 已修好（Origin 证书 + Nginx 443）。
-- 地区：数据库里只有 Europe / EUR（丹麦、法国、德国）。美国 USD 和中国 CNY 待建，
-  建完 `/us/store` 和 `/cn/store` 才不会 307 跳到丹麦。
+- 地区：Europe / EUR、United States / USD、China / CNY 三个，`/us/store` 和
+  `/cn/store` 都是 200。注意：中国区商品还没有 CNY 价格（只有 EUR 和 USD
+  价格），中国区要能下单得先给商品加 CNY 价格。
 - 后端已是 **Medusa 2.22.6**（v1.1.0）：基础镜像按 fork main 的 lockfile 重建
   （`docker/Dockerfile.dtc-runtime-2.22.6`），发布时 `medusa db:migrate` 自动跑了
   2 个新迁移（迁移记录 188 → 190）。之前 2.21.2 后端 + 2.22.6 前端不一致导致的
@@ -135,5 +136,5 @@ curl -s -o /dev/null -w "%{http_code}\n" https://shop-admin.satank.cn/health
 ## 已知问题
 
 - 管理员密码曾明文出现在 VPS 的 `/root/.bash_history` 里，建议清历史、换密码。
-- 地区只有 Europe，美国和中国待建。
+- 中国区商品还没有 CNY 价格（只有 EUR 和 USD 价格），中国区要能下单得先加价。
 - R2 还没填，文件存储还是本地卷。
